@@ -3,6 +3,7 @@
 #include "pch.h"
 #include "TestCommon.h"
 #include <PortableInstaller.h>
+#include "Resources.h"
 #include <Public/AppInstallerArchitecture.h>
 #include <winget/Filesystem.h>
 #include <winget/Manifest.h>
@@ -212,4 +213,51 @@ TEST_CASE("PortableInstaller_UnicodeSymlinkPath", "[PortableInstaller]")
     REQUIRE_FALSE(std::filesystem::exists(portableInstaller2.PortableTargetFullPath));
     REQUIRE_FALSE(AppInstaller::Filesystem::SymlinkExists(portableInstaller2.PortableSymlinkFullPath));
     REQUIRE_FALSE(std::filesystem::exists(portableInstaller2.InstallLocation));
+}
+
+TEST_CASE("PortableInstaller_InstallDirectoryAddedToPathMessage", "[PortableInstaller]")
+{
+    TempDirectory tempDirectory = TestCommon::TempDirectory("TempDirectory", false);
+
+    TestCommon::TempFile testPortable("testPortable.txt");
+    std::ofstream file(testPortable, std::ofstream::out);
+    file.close();
+
+    std::filesystem::path targetPath = tempDirectory.GetPath() / "testPortable.txt";
+    std::filesystem::path symlinkPath = tempDirectory.GetPath() / "testSymlink.exe";
+
+    std::vector<PortableFileEntry> desiredTestState;
+    desiredTestState.emplace_back(std::move(PortableFileEntry::CreateFileEntry(testPortable.GetPath(), targetPath, {})));
+    desiredTestState.emplace_back(std::move(PortableFileEntry::CreateSymlinkEntry(symlinkPath, targetPath)));
+
+    PortableInstaller portableInstaller = PortableInstaller(ScopeEnum::User, Architecture::X64, "testProductCode");
+    portableInstaller.TargetInstallLocation = tempDirectory.GetPath();
+    portableInstaller.BinariesDependOnPath = true;
+    portableInstaller.SetDesiredState(desiredTestState);
+    REQUIRE(portableInstaller.VerifyExpectedState());
+
+    portableInstaller.Install(AppInstaller::CLI::Workflow::OperationType::Install);
+
+    // Symlink creation is skipped when binaries depend on the install directory being on PATH.
+    REQUIRE_FALSE(AppInstaller::Filesystem::SymlinkExists(symlinkPath));
+    REQUIRE(std::filesystem::exists(targetPath));
+    REQUIRE(portableInstaller.InstallDirectoryAddedToPath);
+
+    // The output should report that the package was added to PATH rather than claiming an alias was added.
+    std::string outputMessage = portableInstaller.GetOutputMessage();
+    REQUIRE(outputMessage.find(AppInstaller::CLI::Resource::LocString(AppInstaller::CLI::Resource::String::PortablePackageAddedToPath)) != std::string::npos);
+    REQUIRE(outputMessage.find(AppInstaller::CLI::Resource::LocString(AppInstaller::CLI::Resource::String::PortableAliasAdded)) == std::string::npos);
+
+    // Uninstall through a fresh instance so the desired state is not re-applied, mirroring real usage.
+    PortableInstaller portableInstaller2 = PortableInstaller(ScopeEnum::User, Architecture::X64, "testProductCode");
+    REQUIRE(portableInstaller2.ARPEntryExists());
+    REQUIRE(portableInstaller2.InstallDirectoryAddedToPath);
+
+    portableInstaller2.Uninstall();
+
+    REQUIRE_FALSE(AppInstaller::Filesystem::SymlinkExists(symlinkPath));
+    REQUIRE_FALSE(std::filesystem::exists(targetPath));
+
+    PortableInstaller portableInstaller3 = PortableInstaller(ScopeEnum::User, Architecture::X64, "testProductCode");
+    REQUIRE_FALSE(portableInstaller3.ARPEntryExists());
 }

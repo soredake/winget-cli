@@ -1608,6 +1608,10 @@ Please specify one of them using the --source option to proceed.</value>
   <data name="PortablePackageAlreadyExists" xml:space="preserve">
     <value>Portable package from a different source already exists</value>
   </data>
+  <data name="PortablePackageAddedToPath" xml:space="preserve">
+    <value>Package added to PATH environment variable</value>
+    <comment>Message displayed to inform the user that the package's install directory was added to the PATH environment variable instead of creating a command line alias.</comment>
+  </data>
   <data name="ExtractArchiveSucceeded" xml:space="preserve">
     <value>Successfully extracted archive</value>
   </data>

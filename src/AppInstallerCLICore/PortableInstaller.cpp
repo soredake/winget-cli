@@ -169,6 +169,9 @@ namespace AppInstaller::CLI::Portable
         {
             std::filesystem::path symlinkTargetPath{ Utility::ConvertToUTF16(entry.SymlinkTarget) };
 
+            // True if the symlink was created; false if the install directory was added to PATH instead.
+            bool symlinkCreated = false;
+
             if (BinariesDependOnPath)
             {
                 // Scenario indicated by 'ArchiveBinariesDependOnPath' manifest entry.
@@ -202,6 +205,8 @@ namespace AppInstaller::CLI::Portable
 
                 if (Filesystem::CreateSymlink(symlinkTargetPath, filePath))
                 {
+                    symlinkCreated = true;
+
                     if (InstallDirectoryAddedToPath)
                     {
                         // If the install directory was previously added to PATH, remove it now that the symlink has been created.
@@ -220,7 +225,14 @@ namespace AppInstaller::CLI::Portable
                     CommitToARPEntry(PortableValueName::InstallDirectoryAddedToPath, InstallDirectoryAddedToPath = true);
                 }
             }
-            m_stream << Resource::String::PortableAliasAdded << ' ' << filePath.stem() << std::endl;
+
+            // Only report the command line alias when a symlink was actually created;
+            // otherwise the package was made available through the PATH environment variable,
+            // which Install reports once.
+            if (symlinkCreated)
+            {
+                m_stream << Resource::String::PortableAliasAdded << ' ' << filePath.stem() << std::endl;
+            }
         }
     }
 
@@ -382,6 +394,11 @@ namespace AppInstaller::CLI::Portable
         if (!InstallDirectoryAddedToPath)
         {
             AddToPathVariable(GetPortableLinksLocation(GetScope()));
+        }
+        else
+        {
+            // Symlinks were not used; the install directory was added to PATH instead.
+            m_stream << Resource::String::PortablePackageAddedToPath << std::endl;
         }
 
         // If the operation is an upgrade, the ARP entry should be created last so that a catastrophic failure
